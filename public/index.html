@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Sprite Sheet Arranger & Zoomer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #1e1e2e;
+      color: #cdd6f4;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #89b4fa; text-align: center; }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #181825;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .upload-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: #313244;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    label { font-weight: bold; display: block; margin-bottom: 8px; color: #a6adc8; }
+    input[type="file"] {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #45475a;
+      background: #1e1e2e;
+      color: #cdd6f4;
+    }
+    .hint-file { font-size: 11px; color: #f9e2af; margin-top: 4px; display: block; }
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-top: 15px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #89b4fa;
+      color: #11111b;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      transition: background 0.2s;
+    }
+    button:hover { background-color: #b4befe; }
+    .btn-secondary { background-color: #f9e2af; }
+    .btn-secondary:hover { background-color: #fab387; }
+    .preview-area {
+      margin-top: 25px;
+      text-align: center;
+    }
+    canvas {
+      border: 2px dashed #45475a;
+      background: #11111b;
+      max-width: 100%;
+      border-radius: 8px;
+      margin-top: 10px;
+      image-rendering: pixelated;
+      cursor: pointer;
+    }
+    .download-btn {
+      display: inline-block;
+      margin-top: 15px;
+      padding: 10px 20px;
+      background-color: #a6e3a1;
+      color: #11111b;
+      text-decoration: none;
+      font-weight: bold;
+      border-radius: 6px;
+    }
+    .hint { font-size: 13px; color: #a6adc8; margin-top: 5px; }
+
+    /* Modal Zoom Popup */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    .modal-content {
+      background: #313244;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      border: 2px solid #89b4fa;
+    }
+    .modal canvas {
+      width: 250px;
+      height: 250px;
+      image-rendering: pixelated;
+      background: #11111b;
+      border: 2px solid #45475a;
+    }
+    .close-btn {
+      margin-top: 15px;
+      padding: 8px 20px;
+      background-color: #f38ba8;
+      color: #11111b;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Auto Sprite Sheet Arranger & Zoomer</h1>
+
+    <div class="upload-section">
+      <div class="card">
+        <label>1. Master Image (Opsional):</label>
+        <input type="file" id="masterInput" accept="image/*">
+        <span class="hint-file">💡 Kosongkan jika ingin pakai default: master-64x64.png</span>
+      </div>
+      <div class="card">
+        <label>2. Sprite Sumber:</label>
+        <input type="file" id="spriteInput" accept="image/*">
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button type="button" id="previewCropBtn" class="btn-secondary">🔍 1. Test Preview & Zoom Crop</button>
+      <button type="button" id="processBtn">🚀 2. Proses & Gabungkan ke Master</button>
+    </div>
+
+    <div class="preview-area">
+      <h3 id="previewTitle">Hasil Preview:</h3>
+      <p class="hint">💡 Klik pada salah satu kotak sprite di bawah untuk memperbesar (Zoom)!</p>
+      <canvas id="outputCanvas"></canvas>
+      <br>
+      <a id="downloadBtn" class="download-btn" style="display: none;" download="result-sprite.png">Download Hasil PNG</a>
+    </div>
+  </div>
+
+  <!-- Modal Popup Zoom -->
+  <div id="zoomModal" class="modal">
+    <div class="modal-content">
+      <h3 id="modalTitle" style="color: #89b4fa; margin-top:0;">Detail Sprite</h3>
+      <canvas id="zoomedCanvas"></canvas>
+      <br>
+      <button class="close-btn" id="closeModal">Tutup</button>
+    </div>
+  </div>
+
+  <script>
+    const masterInput = document.getElementById('masterInput');
+    const spriteInput = document.getElementById('spriteInput');
+    const processBtn = document.getElementById('processBtn');
+    const previewCropBtn = document.getElementById('previewCropBtn');
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const previewTitle = document.getElementById('previewTitle');
+
+    const zoomModal = document.getElementById('zoomModal');
+    const zoomedCanvas = document.getElementById('zoomedCanvas');
+    const zCtx = zoomedCanvas.getContext('2d');
+    const closeModal = document.getElementById('closeModal');
+
+    let cachedSprites = [];
+    let currentSpriteImg = null;
+
+    // Helper: Load gambar master (dari file yang diupload ATAU default master-64x64.png jika kosong)
+    async function getMasterImage() {
+      if (masterInput.files && masterInput.files[0]) {
+        return await loadImage(masterInput.files[0]);
+      } else {
+        // Load default dari folder public
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Gagal memuat master-64x64.png default. Pastikan file tersebut ada di dalam folder public!'));
+          img.src = 'master-64x64.png';
+        });
+      }
+    }
+
+    function extractSpritesAutomatically(spriteImg) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = spriteImg.width;
+      tempCanvas.height = spriteImg.height;
+      const tCtx = tempCanvas.getContext('2d');
+      tCtx.drawImage(spriteImg, 0, 0);
+      const imgData = tCtx.getImageData(0, 0, spriteImg.width, spriteImg.height).data;
+
+      const w = spriteImg.width;
+      const h = spriteImg.height;
+      const visited = new Uint8Array(w * h);
+      let sprites = [];
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          const alpha = imgData[idx + 3];
+
+          if (alpha > 20 && !visited[y * w + x]) {
+            let minX = x, maxX = x, minY = y, maxY = y;
+            let queue = [{x, y}];
+            visited[y * w + x] = 1;
+
+            let head = 0;
+            while(head < queue.length) {
+              let curr = queue[head++];
+              if (curr.x < minX) minX = curr.x;
+              if (curr.x > maxX) maxX = curr.x;
+              if (curr.y < minY) minY = curr.y;
+              if (curr.y > maxY) maxY = curr.y;
+
+              const neighbors = [
+                {x: curr.x + 1, y: curr.y},
+                {x: curr.x - 1, y: curr.y},
+                {x: curr.x, y: curr.y + 1},
+                {x: curr.x, y: curr.y - 1}
+              ];
+
+              for (let n of neighbors) {
+                if (n.x >= 0 && n.x < w && n.y >= 0 && n.y < h) {
+                  const nIdx = (n.y * w + n.x) * 4;
+                  const nAlpha = imgData[nIdx + 3];
+                  const nVisitedIdx = n.y * w + n.x;
+
+                  if (nAlpha > 20 && !visited[nVisitedIdx]) {
+                    visited[nVisitedIdx] = 1;
+                    queue.push(n);
+                  }
+                }
+              }
+            }
+
+            let boxWidth = maxX - minX + 1;
+            let boxHeight = maxY - minY + 1;
+
+            if (boxWidth > 4 && boxHeight > 4) {
+              sprites.push({ x: minX, y: minY, width: boxWidth, height: boxHeight });
+            }
+          }
+        }
+      }
+
+      sprites.sort((a, b) => {
+        if (Math.abs(a.y - b.y) > 10) return a.y - b.y;
+        return a.x - b.x;
+      });
+
+      return sprites;
+    }
+
+    // FITUR 1: PREVIEW & ZOOM
+    previewCropBtn.addEventListener('click', async () => {
+      if (!spriteInput.files[0]) {
+        alert('Tolong upload file Sprite Sumber terlebih dahulu!');
+        return;
+      }
+
+      try {
+        currentSpriteImg = await loadImage(spriteInput.files[0]);
+        cachedSprites = extractSpritesAutomatically(currentSpriteImg);
+        renderPreviewGrid();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    function renderPreviewGrid() {
+      if (!cachedSprites.length) return;
+
+      const previewCols = Math.min(cachedSprites.length, 6);
+      const previewRows = Math.ceil(cachedSprites.length / previewCols);
+
+      canvas.width = previewCols * 70;
+      canvas.height = previewRows * 70;
+
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#11111b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      let idx = 0;
+      for (let s of cachedSprites) {
+        const destX = (idx % previewCols) * 70 + 10;
+        const destY = Math.floor(idx / previewCols) * 70 + 10;
+
+        ctx.drawImage(
+          currentSpriteImg,
+          s.x, s.y, s.width, s.height,
+          destX, destY, Math.min(s.width, 50), Math.min(s.height, 50)
+        );
+
+        ctx.strokeStyle = '#a6e3a1';
+        ctx.strokeRect(destX - 2, destY - 2, 54, 54);
+
+        idx++;
+      }
+
+      previewTitle.innerText = `Berhasil Auto-Crop ${cachedSprites.length} Gambar Karakter (Klik Kotak untuk Zoom):`;
+      downloadBtn.style.display = 'none';
+    }
+
+    // Klik untuk Zoom
+    canvas.addEventListener('click', (e) => {
+      if (!cachedSprites.length || !currentSpriteImg) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      const previewCols = Math.min(cachedSprites.length, 6);
+      let idx = 0;
+      for (let s of cachedSprites) {
+        const destX = (idx % previewCols) * 70 + 10;
+        const destY = Math.floor(idx / previewCols) * 70 + 10;
+
+        if (clickX >= destX - 2 && clickX <= destX + 52 && clickY >= destY - 2 && clickY <= destY + 52) {
+          zoomedCanvas.width = s.width;
+          zoomedCanvas.height = s.height;
+          zCtx.imageSmoothingEnabled = false;
+          zCtx.clearRect(0, 0, zoomedCanvas.width, zoomedCanvas.height);
+          zCtx.drawImage(currentSpriteImg, s.x, s.y, s.width, s.height, 0, 0, s.width, s.height);
+
+          document.getElementById('modalTitle').innerText = `Detail Sprite #${idx + 1}`;
+          zoomModal.style.display = 'flex';
+          break;
+        }
+        idx++;
+      }
+    });
+
+    closeModal.addEventListener('click', () => {
+      zoomModal.style.display = 'none';
+    });
+
+    // FITUR 2: GABUNG KE MASTER (OTOMATIS PAKAI DEFAULT JIKA KOSONG)
+    processBtn.addEventListener('click', async () => {
+      if (!spriteInput.files[0]) {
+        alert('Tolong upload file Sprite Sumber terlebih dahulu!');
+        return;
+      }
+
+      try {
+        const masterImg = await getMasterImage();
+        const spriteImg = await loadImage(spriteInput.files[0]);
+
+        canvas.width = masterImg.width;
+        canvas.height = masterImg.height;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = masterImg.width;
+        tempCanvas.height = masterImg.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(masterImg, 0, 0);
+        const imgData = tempCtx.getImageData(0, 0, masterImg.width, masterImg.height).data;
+
+        let slots = [];
+        const visitedMaster = new Uint8Array(masterImg.width * masterImg.height);
+
+        for (let y = 0; y < masterImg.height; y++) {
+          for (let x = 0; x < masterImg.width; x++) {
+            const idx = (y * masterImg.width + x) * 4;
+            if (imgData[idx + 3] > 200 && imgData[idx] < 40 && !visitedMaster[y * masterImg.width + x]) {
+
+              let boxW = 0;
+              while (x + boxW < masterImg.width && imgData[(y * masterImg.width + (x + boxW)) * 4 + 3] > 200 && imgData[(y * masterImg.width + (x + boxW)) * 4] < 40) {
+                boxW++;
+              }
+
+              let boxH = 0;
+              while (y + boxH < masterImg.height && imgData[((y + boxH) * masterImg.width + x) * 4 + 3] > 200 && imgData[((y + boxH) * masterImg.width + x) * 4] < 40) {
+                boxH++;
+              }
+
+              slots.push({ x, y, width: boxW, height: boxH });
+
+              for (let dy = 0; dy < boxH; dy++) {
+                for (let dx = 0; dx < boxW; dx++) {
+                  if (x + dx < masterImg.width && y + dy < masterImg.height) {
+                    visitedMaster[(y + dy) * masterImg.width + (x + dx)] = 1;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        slots.sort((a, b) => (Math.abs(a.y - b.y) > 15 ? a.y - b.y : a.x - b.x));
+
+        const detectedSprites = extractSpritesAutomatically(spriteImg);
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < Math.min(slots.length, detectedSprites.length); i++) {
+          const slot = slots[i];
+          const s = detectedSprites[i];
+
+          const targetX = (slot.x + slot.width) - s.width;
+          const targetY = (slot.y + slot.height) - s.height;
+
+          ctx.drawImage(
+            spriteImg,
+            s.x, s.y, s.width, s.height,
+            targetX, targetY, s.width, s.height
+          );
+        }
+
+        previewTitle.innerText = "Hasil Akhir Berhasil Digabungkan!";
+        downloadBtn.href = canvas.toDataURL('image/png');
+        downloadBtn.style.display = 'inline-block';
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    function loadImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = URL.createObjectURL(file);
+      });
+    }
+  </script>
+</body>
+</html>
